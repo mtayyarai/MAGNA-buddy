@@ -22,31 +22,37 @@ const BUILD_DIR = path.join(ROOT, 'build');
 const SRC_DIR   = path.join(ROOT, 'src');
 const RENDERER  = path.join(SRC_DIR, 'renderer');
 const SVG_PATH  = path.join(RENDERER, 'magna-logo.svg');
+// Preferred override: a hand-provided PNG dropped into build/icon-source.png.
+// If present, we use it as the icon source and skip the SVG extraction path.
+const USER_PNG_PATH = path.join(BUILD_DIR, 'icon-source.png');
 
 fs.mkdirSync(BUILD_DIR, { recursive: true });
 fs.mkdirSync(SRC_DIR,   { recursive: true });
 
 // ---------------------------------------------------------------------------
-// 1. Extract the embedded PNG from the SVG wrapper.
+// 1. Pick the icon source: user-provided PNG > embedded PNG inside SVG.
 // ---------------------------------------------------------------------------
-if (!fs.existsSync(SVG_PATH)) {
-  console.error(`[make-icons] missing ${SVG_PATH} — ship a MAGNA logo there first.`);
-  // Fall back to a solid-blue tiny PNG so builds still work.
+let sourcePNG;
+if (fs.existsSync(USER_PNG_PATH)) {
+  sourcePNG = fs.readFileSync(USER_PNG_PATH);
+  console.log(`[make-icons] using build/icon-source.png (${(sourcePNG.length / 1024).toFixed(1)} KB)`);
+} else if (fs.existsSync(SVG_PATH)) {
+  const svgText = fs.readFileSync(SVG_PATH, 'utf8');
+  const m = svgText.match(/data:image\/png;base64,([A-Za-z0-9+/=\s]+?)["']/);
+  if (!m) {
+    console.error('[make-icons] could not locate base64 PNG inside SVG');
+    process.exit(1);
+  }
+  sourcePNG = Buffer.from(m[1].replace(/\s+/g, ''), 'base64');
+  console.log(`[make-icons] extracted PNG from SVG (${(sourcePNG.length / 1024).toFixed(1)} KB)`);
+} else {
+  console.error('[make-icons] no icon source found (neither build/icon-source.png nor the SVG).');
   const fallback = makeSolidPNG(32, [74, 142, 224]);
   fs.writeFileSync(path.join(SRC_DIR, 'tray.png'), fallback);
   fs.writeFileSync(path.join(BUILD_DIR, 'icon.png'), fallback);
   fs.writeFileSync(path.join(BUILD_DIR, 'icon.ico'), fallbackICO(fallback));
   process.exit(0);
 }
-
-const svgText = fs.readFileSync(SVG_PATH, 'utf8');
-const m = svgText.match(/data:image\/png;base64,([A-Za-z0-9+/=\s]+?)["']/);
-if (!m) {
-  console.error('[make-icons] could not locate base64 PNG inside SVG');
-  process.exit(1);
-}
-const sourcePNG = Buffer.from(m[1].replace(/\s+/g, ''), 'base64');
-console.log(`[make-icons] extracted PNG from SVG (${(sourcePNG.length / 1024).toFixed(1)} KB)`);
 
 (async () => {
   const img = await Jimp.read(sourcePNG);

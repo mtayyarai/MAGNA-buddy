@@ -1646,6 +1646,11 @@ ${moveScript}
       errLog(`migration: ${e.message}`);
     }
 
+    // Fire-and-forget legacy uninstaller: if the old "Googly Eyes" is still
+    // installed (either per-user or per-machine), silently kick off its
+    // uninstaller once so the Start-menu entry + icon are the new MAGNA Buddy.
+    try { maybeUninstallLegacyGooglyEyes(); } catch (e) { errLog(`legacy uninstall: ${e.message}`); }
+
     // Allow microphone access from our own renderers.
     session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
       if (permission === 'media' || permission === 'microphone') return callback(true);
@@ -1772,4 +1777,43 @@ ${moveScript}
   }
 
   app.on('before-quit', () => info('app exiting'));
+
+  // --------- Legacy "Googly Eyes" uninstaller probe ---------
+  // Runs once per machine. If the old Googly Eyes NSIS install is still
+  // around, kick off its silent uninstaller so the user's Start menu /
+  // taskbar don't keep showing both apps. The uninstaller may still prompt
+  // for UAC when the install was per-machine — that's fine; we just invoke
+  // the uninstaller once.
+  function maybeUninstallLegacyGooglyEyes() {
+    const marker = path.join(app.getPath('userData'), '.legacy_cleaned');
+    if (fs.existsSync(marker)) return;
+
+    const candidates = [
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Googly Eyes', 'Uninstall Googly Eyes.exe'),
+      path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Googly Eyes', 'Uninstall Googly Eyes.exe'),
+      path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Googly Eyes', 'Uninstall Googly Eyes.exe')
+    ];
+    const found = candidates.find((p) => p && fs.existsSync(p));
+    if (!found) {
+      // Nothing to do — write marker so we don't probe again.
+      try { fs.writeFileSync(marker, 'none'); } catch {}
+      return;
+    }
+
+    info(`legacy uninstaller: ${found}`);
+    try {
+      const { spawn } = require('node:child_process');
+      // NSIS silent uninstall. `/S` runs quietly; `_?=` keeps the uninstaller
+      // from relocating itself to %TEMP% (otherwise exit codes get weird).
+      const dir = path.dirname(found);
+      const p = spawn(found, ['/S', `_?=${dir}`], {
+        detached: true, stdio: 'ignore', windowsHide: true
+      });
+      p.on('error', (e) => errLog(`legacy uninstall spawn: ${e.message}`));
+      p.unref();
+      try { fs.writeFileSync(marker, found); } catch {}
+    } catch (e) {
+      errLog(`legacy uninstall: ${e.message}`);
+    }
+  }
 }
