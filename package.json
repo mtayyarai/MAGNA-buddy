@@ -1,6 +1,6 @@
 {
   "name": "magna-buddy",
-  "version": "0.5.0",
+  "version": "0.5.4",
   "description": "MAGNA Buddy — on-screen voice assistant with push-to-talk, OpenAI Realtime API, computer-use tools, and the Magna brand character.",
   "main": "src/main.js",
   "private": true,
@@ -15,7 +15,8 @@
   },
   "devDependencies": {
     "electron": "32.3.3",
-    "electron-builder": "25.1.8"
+    "electron-builder": "25.1.8",
+    "jimp": "^1.6.1"
   },
   "build": {
     "appId": "com.magna.buddy",
@@ -61,8 +62,18 @@
     },
     "mac": {
       "target": [
-        { "target": "dmg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
       "category": "public.app-category.productivity",
       "artifactName": "MAGNA-Buddy-${version}-${arch}.${ext}",
@@ -80,10 +91,22 @@
       "title": "MAGNA Buddy ${version}",
       "icon": "build/icon.png",
       "contents": [
-        { "x": 130, "y": 220, "type": "file" },
-        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 220,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
       ],
-      "window": { "width": 540, "height": 380 }
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     }
   },
   "dependencies": {

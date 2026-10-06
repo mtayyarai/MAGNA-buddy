@@ -51,10 +51,50 @@
           <input id="cursorSize" type="number" min="48" max="120">
         </label>
       </div>
+
+      <label>Character colour</label>
+      <div class="row">
+        <select id="colorPreset" style="flex:1">
+          <option value="#4a8ee0">Cute Blue (default)</option>
+          <option value="#dc3232">Magna Red</option>
+          <option value="#32b446">Magna Green</option>
+          <option value="#9b59b6">Lavender</option>
+          <option value="#ff8ab2">Bubblegum Pink</option>
+          <option value="#ff8c42">Tangerine</option>
+          <option value="#ffd84d">Sunshine</option>
+          <option value="#2ecc71">Mint</option>
+          <option value="#1abc9c">Teal</option>
+          <option value="#34495e">Slate</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input id="colorPicker" type="color" value="#4a8ee0" style="width:52px; height:34px; padding:2px; cursor:pointer">
+      </div>
+      <p class="muted small" style="margin-top:4px">
+        Lighter + darker shades are generated automatically to make a smooth gradient. Changes apply live — no restart needed.
+      </p>
       <label class="check"><input id="captions"         type="checkbox"> Show captions</label>
       <label class="check"><input id="followMouse"      type="checkbox"> Follow mouse</label>
       <label class="check"><input id="allowComputerUse" type="checkbox"> Let him use the computer</label>
       <label class="check"><input id="startWithWindows" type="checkbox"> Start with Windows</label>
+
+      <label>Push-to-talk hotkey
+        <input id="pushToTalkKey" type="text" placeholder="Alt+M">
+      </label>
+      <p class="muted small" style="margin-top:4px">
+        Press to start listening, press again to send. Examples: <code>Alt+M</code> (default, safe), <code>Ctrl+M</code>, <code>F8</code>, <code>Right Ctrl</code>, or just <code>M</code> (warning: hijacks every M-keypress). Leave blank or type <code>none</code> to disable.
+      </p>
+    </section>
+
+    <section>
+      <h2>Periodic AI updates</h2>
+      <label class="check"><input id="periodicAiNews" type="checkbox"> Share an AI tidbit every few minutes</label>
+      <label>Interval (minutes, 1–240)
+        <input id="periodicIntervalMinutes" type="number" min="1" max="240">
+      </label>
+      <p class="muted small" style="margin-top:4px">
+        A short AI fact / quote / link lands in the bubble on this cadence.
+        Uses the same chat model as voice replies (≈ $0.0001 per fire with gpt-4o-mini).
+      </p>
     </section>
 
     <section>

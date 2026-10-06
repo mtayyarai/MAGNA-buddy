@@ -3,6 +3,26 @@
 const el    = document.getElementById('c');
 const label = document.getElementById('label');
 const pupils = document.querySelectorAll('.ai-pupil');
+const bodyEl = document.querySelector('.ai-body');
+
+// ===== Character color (synced with the home widget) ====================
+function applyBodyColor(hex) {
+  if (!window.MagnaPalette || !hex || !bodyEl) return;
+  bodyEl.style.setProperty('background', window.MagnaPalette.bodyGradient(hex).trim(), 'important');
+}
+
+(async function initColor() {
+  try {
+    const s = await window.api.getSettings();
+    if (s && s.characterColor) applyBodyColor(s.characterColor);
+  } catch {}
+})();
+
+if (window.api && window.api.onSettingsChanged) {
+  window.api.onSettingsChanged((s) => {
+    if (s && s.characterColor) applyBodyColor(s.characterColor);
+  });
+}
 
 let hideTimer = null;
 let landTimer = null;

@@ -2,7 +2,7 @@
 
 const {
   app, BrowserWindow, Tray, Menu, nativeImage,
-  ipcMain, safeStorage, shell, dialog, Notification, screen, session
+  ipcMain, safeStorage, shell, dialog, Notification, screen, session, desktopCapturer, globalShortcut
 } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -70,6 +70,10 @@ function startApp() {
     startWithWindows: false,
     showWidget: true,
     widgetSize: 90,
+    characterColor: '#4a8ee0',
+    pushToTalkKey: 'Alt+M',
+    periodicAiNews: true,
+    periodicIntervalMinutes: 5,
     customWidgetX: null,
     customWidgetY: null,
     hotkeys: {
@@ -104,10 +108,24 @@ function startApp() {
       fs.writeFileSync(settingsPath(), JSON.stringify(s, null, 2));
       applyStartupSetting(!!s.startWithWindows);
       info('settings saved');
+      broadcastSettings(s);
+      registerPushToTalkHotkey(); // re-apply hotkey if the user changed it
+      startAiNewsTimer();         // restart with new interval / toggle
       return true;
     } catch (e) {
       errLog(`settings save: ${e.message}`);
       return false;
+    }
+  }
+
+  function broadcastSettings(s) {
+    try {
+      const wins = BrowserWindow.getAllWindows();
+      for (const w of wins) {
+        if (w && !w.isDestroyed()) w.webContents.send('settings:changed', s);
+      }
+    } catch (e) {
+      errLog(`broadcast settings: ${e.message}`);
     }
   }
 
@@ -175,7 +193,7 @@ function startApp() {
           path: '/v1/models',
           headers: {
             Authorization: `Bearer ${apiKey}`,
-            'User-Agent': 'GooglyEyes/0.1'
+            'User-Agent': 'MAGNA-Buddy/0.5'
           },
           timeout: 12000
         },
@@ -308,6 +326,7 @@ function startApp() {
     });
     widgetWin.setAlwaysOnTop(true, 'screen-saver');
     widgetWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+    try { widgetWin.setContentProtection(true); } catch {}
     widgetWin.setMenuBarVisibility(false);
     widgetWin.loadFile(path.join(__dirname, 'renderer', 'widget.html'));
     widgetWin.once('ready-to-show', () => widgetWin.showInactive());
@@ -431,6 +450,7 @@ function startApp() {
       bubbleWin.setAlwaysOnTop(true, 'screen-saver');
       bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
       bubbleWin.setIgnoreMouseEvents(true, { forward: true });
+      try { bubbleWin.setContentProtection(true); } catch {}
       bubbleWin.setMenuBarVisibility(false);
       bubbleWin.loadFile(path.join(__dirname, 'renderer', 'bubble.html'));
       bubbleWin.on('closed', () => { bubbleWin = null; });
@@ -724,9 +744,10 @@ function startApp() {
               '  1. For a search on YouTube / Google / Amazon / Reddit / etc, call web_search — DO NOT call open_url + type_text separately.',
               '  2. To type into any webpage (ChatGPT, Twitter, Notion, Gmail, …): first call open_url, then call wait with ms=3500 (give the page time to load and auto-focus its input), then type_text, then (if needed) press_keys with keys="enter".',
               '  3. To use an installed app: open_app, then wait with ms=1500, then type_text / press_keys.',
-              '  4. You can call multiple tools in one response — the client will execute them in order and then ask you to continue.',
-              '  5. Only act when the user asks. Never type or press keys unless explicitly instructed. Refuse Win+L / Ctrl+Alt+Del / Ctrl+Shift+Esc.',
-              '  6. Keep spoken replies to one short sentence.'
+              '  4. **Clicking something on screen you have to see first:** before click_at or scroll_at, call look_at_screen to receive a screenshot, then in your next response pick the x,y on the 0-1000 grid of the thing you want and call click_at. Example — "click the first YouTube video" → web_search youtube → wait 3500 → look_at_screen → (model sees the thumbnails) → click_at the first thumbnail.',
+              '  5. You can call multiple tools in one response — the client will execute them in order and then ask you to continue.',
+              '  6. Only act when the user asks. Never type or press keys unless explicitly instructed. Refuse Win+L / Ctrl+Alt+Del / Ctrl+Shift+Esc.',
+              '  7. Keep spoken replies to one short sentence.'
             ].join('\n')
           : ''),
         output_modalities: ['text'],
@@ -890,6 +911,7 @@ function startApp() {
       case 'click_at':   return `Clicking…`;
       case 'scroll_at':  return `Scrolling…`;
       case 'wait':       return `Waiting ${(Number(args.ms || 0) / 1000).toFixed(1)}s…`;
+      case 'look_at_screen': return `Looking at screen…`;
       default:           return `Running ${name}…`;
     }
   }
@@ -1003,6 +1025,14 @@ function startApp() {
             required: ['ms']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'look_at_screen',
+          description: 'Take a screenshot of the primary monitor and send it to you as an image. Use this BEFORE click_at or scroll_at whenever you need to know *where* to point — e.g. "click the first YouTube video", "press that red button". The screenshot is injected as an input_image user message; your next response can then call click_at with coordinates on the 0-1000 grid (0,0 = top-left of monitor; 1000,1000 = bottom-right). The character + bubble + AI cursor are excluded from the capture so you see the real screen.',
+          parameters: { type: 'object', properties: {}, required: [] }
+        }
       }
     ];
   }
@@ -1019,12 +1049,94 @@ function startApp() {
         case 'click_at':   return await toolClickAt(args.x, args.y, args.button);
         case 'scroll_at':  return await toolScrollAt(args.amount, args.x, args.y);
         case 'wait':       return await toolWait(args.ms);
+        case 'look_at_screen': return await toolLookAtScreen();
         default:           return { ok: false, error: `unknown tool: ${name}` };
       }
     } catch (e) {
       errLog(`tool ${name}: ${e.message}`);
       return { ok: false, error: e.message };
     }
+  }
+
+  // Capture the primary monitor as a JPEG buffer and inject it into the
+  // active realtime conversation as an input_image user message so the model
+  // can reason about what's on screen before clicking.
+  async function toolLookAtScreen() {
+    if (!rt || rt.readyState !== 1) {
+      return { ok: false, error: 'no active realtime session' };
+    }
+
+    // Briefly hide our overlays so they can't appear in the capture, even
+    // though we also set WDA_EXCLUDEFROMCAPTURE on them.
+    const hidWidget = widgetWin && widgetWin.isVisible();
+    const hidCursor = aiCursorWin && aiCursorWin.isVisible();
+    const hidBubble = bubbleWin && bubbleWin.isVisible();
+    try { if (hidWidget) widgetWin.hide(); } catch {}
+    try { if (hidCursor) aiCursorWin.hide(); } catch {}
+    try { if (hidBubble) bubbleWin.hide(); } catch {}
+
+    // Small pause so the compositor actually hides them before we snap.
+    await new Promise((r) => setTimeout(r, 120));
+
+    let b64 = null;
+    try {
+      const primary = screen.getPrimaryDisplay();
+      const { width, height } = primary.size;
+      // Scale down to control upload size; keep aspect ratio.
+      const maxDim = 1280;
+      const scale = Math.min(1, maxDim / Math.max(width, height));
+      const thumbW = Math.round(width * scale);
+      const thumbH = Math.round(height * scale);
+
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: thumbW, height: thumbH },
+        fetchWindowIcons: false
+      });
+
+      const match = sources.find((s) => String(s.display_id) === String(primary.id)) || sources[0];
+      if (!match || match.thumbnail.isEmpty()) {
+        throw new Error('no screen source');
+      }
+
+      const jpeg = match.thumbnail.toJPEG(72);
+      b64 = jpeg.toString('base64');
+      info(`look_at_screen captured ${thumbW}x${thumbH}, ${Math.round(jpeg.length / 1024)}KB`);
+    } catch (e) {
+      errLog(`capture: ${e.message}`);
+      // Restore visibility before returning.
+      try { if (hidWidget) widgetWin.showInactive(); } catch {}
+      try { if (hidCursor) aiCursorWin.showInactive(); } catch {}
+      try { if (hidBubble) bubbleWin.showInactive(); } catch {}
+      return { ok: false, error: e.message };
+    }
+
+    try { if (hidWidget) widgetWin.showInactive(); } catch {}
+    try { if (hidCursor) aiCursorWin.showInactive(); } catch {}
+    try { if (hidBubble) bubbleWin.showInactive(); } catch {}
+
+    // Inject the screenshot into the realtime conversation as a user image
+    // message. The main loop will send response.create after this tool
+    // output, so the model's next response will have the image in context.
+    sendRt({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [
+          {
+            type: 'input_text',
+            text: 'Screenshot of my primary monitor. Use this to decide where to click (0-1000 grid, 0,0 = top-left).'
+          },
+          {
+            type: 'input_image',
+            image_url: `data:image/jpeg;base64,${b64}`
+          }
+        ]
+      }
+    });
+
+    return { ok: true, message: 'screen captured and sent' };
   }
 
   async function toolWait(ms) {
@@ -1308,6 +1420,7 @@ ${moveScript}
     aiCursorWin.setAlwaysOnTop(true, 'screen-saver');
     aiCursorWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
     aiCursorWin.setIgnoreMouseEvents(true, { forward: false });
+    try { aiCursorWin.setContentProtection(true); } catch {}
     aiCursorWin.setMenuBarVisibility(false);
     aiCursorWin.loadFile(path.join(__dirname, 'renderer', 'cursor.html'));
     aiCursorWin.once('ready-to-show', () => aiCursorWin.showInactive());
@@ -1569,7 +1682,94 @@ ${moveScript}
     } catch (e) {
       errLog(`widget init: ${e.message}`);
     }
+
+    registerPushToTalkHotkey();
+    startAiNewsTimer();
   });
+
+  app.on('will-quit', () => {
+    try { globalShortcut.unregisterAll(); } catch {}
+  });
+
+  // --------- Periodic AI update ---------
+  // Fires a small chat completion every N minutes asking for a brief AI
+  // fact or link. Lands in the bubble history as "[AI update]". Costs
+  // roughly $0.0001 per fire with gpt-4o-mini.
+  let aiNewsTimer = null;
+  function startAiNewsTimer() {
+    stopAiNewsTimer();
+    const s = loadSettings();
+    if (s.periodicAiNews === false) return;
+    if (!readKey()) return; // no key — nothing to call
+    const minutes = Math.max(1, Math.min(240, Number(s.periodicIntervalMinutes) || 5));
+    const period = minutes * 60 * 1000;
+    aiNewsTimer = setInterval(fireAiNews, period);
+    info(`ai-news timer every ${minutes}m`);
+  }
+  function stopAiNewsTimer() {
+    if (aiNewsTimer) { clearInterval(aiNewsTimer); aiNewsTimer = null; }
+  }
+
+  async function fireAiNews() {
+    const key = readKey();
+    if (!key) return;
+    const s = loadSettings();
+    try {
+      const ctl = new AbortController();
+      const to = setTimeout(() => ctl.abort(), 30_000);
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: s.chatModel || 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are MAGNA Buddy. Share one short interesting fact, quote, or recent development about AI in 1-2 sentences. Sometimes include a canonical URL (e.g. https://openai.com/blog, https://www.anthropic.com/news, https://news.ycombinator.com) when relevant. Plain text, no markdown.'
+            },
+            { role: 'user', content: 'Give me a short AI update now.' }
+          ],
+          max_tokens: 120,
+          temperature: 1.0
+        }),
+        signal: ctl.signal
+      });
+      clearTimeout(to);
+      if (!r.ok) {
+        errLog(`ai-news ${r.status}`);
+        return;
+      }
+      const data = await r.json();
+      const text = (data.choices?.[0]?.message?.content || '').trim();
+      if (text) {
+        addToBubbleHistory({ user: '[AI update]', reply: text });
+        info('ai-news delivered');
+      }
+    } catch (e) {
+      errLog(`ai-news: ${e.message}`);
+    }
+  }
+
+  // --------- Global push-to-talk hotkey ---------
+  // Press once to start listening, press again to send. Default `Alt+M` so
+  // typing M in text fields still works; user can override to any Electron
+  // accelerator in Settings (including bare `M`, `RightCtrl`, `F8`, …).
+  function registerPushToTalkHotkey() {
+    try { globalShortcut.unregisterAll(); } catch {}
+    const s = loadSettings();
+    const accel = (s.pushToTalkKey || 'Alt+M').trim();
+    if (!accel || accel.toLowerCase() === 'none') return;
+    try {
+      const ok = globalShortcut.register(accel, () => {
+        if (!widgetWin || widgetWin.isDestroyed()) return;
+        widgetWin.webContents.send('hotkey:toggleTalk');
+      });
+      if (ok) info(`push-to-talk hotkey = ${accel}`);
+      else errLog(`push-to-talk register returned false (${accel})`);
+    } catch (e) {
+      errLog(`push-to-talk register: ${e.message}`);
+    }
+  }
 
   app.on('before-quit', () => info('app exiting'));
 }

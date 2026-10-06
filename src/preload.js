@@ -11,8 +11,9 @@ contextBridge.exposeInMainWorld('api', {
   hasKey:        ()  => ipcRenderer.invoke('key:has'),
 
   // --- settings ---
-  getSettings:   ()  => ipcRenderer.invoke('settings:get'),
-  saveSettings:  (s) => ipcRenderer.invoke('settings:save', s),
+  getSettings:         ()  => ipcRenderer.invoke('settings:get'),
+  saveSettings:        (s) => ipcRenderer.invoke('settings:save', s),
+  onSettingsChanged:   (fn) => ipcRenderer.on('settings:changed', (_, s) => { try { fn(s); } catch {} }),
 
   // --- shell / window ---
   openExternal:  (u) => ipcRenderer.invoke('shell:openExternal', u),
@@ -46,5 +47,8 @@ contextBridge.exposeInMainWorld('api', {
   bubbleClose:       ()       => ipcRenderer.send('bubble:close'),
 
   // --- AI cursor overlay ---
-  onAiCursorFly:     (fn) => ipcRenderer.on('aicursor:fly', (_, d) => { try { fn(d); } catch {} })
+  onAiCursorFly:     (fn) => ipcRenderer.on('aicursor:fly', (_, d) => { try { fn(d); } catch {} }),
+
+  // --- Global hotkey ---
+  onHotkeyToggleTalk: (fn) => ipcRenderer.on('hotkey:toggleTalk', () => { try { fn(); } catch {} })
 });

@@ -6,6 +6,30 @@ const leftEye  = document.querySelector('.eye.left');
 const rightEye = document.querySelector('.eye.right');
 const pupils   = document.querySelectorAll('.pupil');
 
+// ===== Character color (user-selectable) =================================
+function applyBodyColor(hex) {
+  if (!window.MagnaPalette || !hex) return;
+  const grad = window.MagnaPalette.bodyGradient(hex);
+  // Only paint the idle gradient — listening (green) and thinking (orange)
+  // stay as hardcoded states so the user still gets a clear status signal.
+  hitbox.style.setProperty('background', grad.trim(), 'important');
+}
+
+(async function initColor() {
+  try {
+    const s = await window.api.getSettings();
+    if (s && s.characterColor) applyBodyColor(s.characterColor);
+  } catch {}
+})();
+
+if (window.api && window.api.onSettingsChanged) {
+  window.api.onSettingsChanged((s) => {
+    if (s && s.characterColor && state !== 'listening' && state !== 'thinking') {
+      applyBodyColor(s.characterColor);
+    }
+  });
+}
+
 // ===== Sound effects (Web Audio, procedural) ==============================
 let outCtx = null;
 function sfxCtx() {
@@ -167,6 +191,14 @@ window.addEventListener('contextmenu', (e) => {
   try { window.api.widgetContextMenu(); } catch {}
 });
 window.addEventListener('dragstart', (e) => e.preventDefault());
+
+// Global push-to-talk hotkey — press once to start, press again to send.
+if (window.api && window.api.onHotkeyToggleTalk) {
+  window.api.onHotkeyToggleTalk(() => {
+    if (state === 'idle') armListening();
+    else if (state === 'listening') stopAndSubmit();
+  });
+}
 
 // ===== Realtime audio pipeline ===========================================
 async function armListening() {

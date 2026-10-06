@@ -33,6 +33,22 @@ function refreshPricing() {
   sel.addEventListener('change', refreshPricing);
   refreshPricing();
 
+  // --- character colour ---
+  const colorPicker = $('#colorPicker');
+  const colorPreset = $('#colorPreset');
+  const savedColor = (settings.characterColor || '#4a8ee0').toLowerCase();
+  colorPicker.value = savedColor;
+  const presetMatch = [...colorPreset.options].find((o) => o.value.toLowerCase() === savedColor);
+  colorPreset.value = presetMatch ? presetMatch.value : 'custom';
+  colorPreset.addEventListener('change', () => {
+    if (colorPreset.value !== 'custom') colorPicker.value = colorPreset.value;
+  });
+  colorPicker.addEventListener('input', () => {
+    const v = colorPicker.value.toLowerCase();
+    const match = [...colorPreset.options].find((o) => o.value.toLowerCase() === v);
+    colorPreset.value = match ? match.value : 'custom';
+  });
+
   $('#transcribeModel').value  = settings.transcribeModel  ?? '';
   $('#researchModel').value    = settings.researchModel    ?? '';
   $('#homePosition').value     = settings.homePosition     ?? 'center';
@@ -41,6 +57,9 @@ function refreshPricing() {
   $('#followMouse').checked    = !!settings.followMouse;
   $('#allowComputerUse').checked = !!settings.allowComputerUse;
   $('#startWithWindows').checked = !!settings.startWithWindows;
+  $('#pushToTalkKey').value       = settings.pushToTalkKey ?? 'Alt+M';
+  $('#periodicAiNews').checked    = settings.periodicAiNews !== false;
+  $('#periodicIntervalMinutes').value = settings.periodicIntervalMinutes ?? 5;
   $('#personality').value      = settings.personality      ?? '';
   $('#hotkeys').textContent = Object.entries(settings.hotkeys || {})
     .map(([k, v]) => `${k.padEnd(14)}  ${v}`)
@@ -52,6 +71,7 @@ $('#saveBtn').addEventListener('click', async () => {
   const next = {
     ...settings,
     realtimeModel:    $('#realtimeModel').value.trim() || 'gpt-realtime-2.1-mini',
+    characterColor:   $('#colorPicker').value || '#4a8ee0',
     transcribeModel:  $('#transcribeModel').value.trim(),
     researchModel:    $('#researchModel').value.trim(),
     homePosition:     $('#homePosition').value,
@@ -60,7 +80,10 @@ $('#saveBtn').addEventListener('click', async () => {
     followMouse:      $('#followMouse').checked,
     allowComputerUse: $('#allowComputerUse').checked,
     startWithWindows: $('#startWithWindows').checked,
-    personality:      $('#personality').value
+    personality:      $('#personality').value,
+    pushToTalkKey:    $('#pushToTalkKey').value.trim(),
+    periodicAiNews:   $('#periodicAiNews').checked,
+    periodicIntervalMinutes: Math.max(1, Math.min(240, parseInt($('#periodicIntervalMinutes').value, 10) || 5))
   };
   const ok = await window.api.saveSettings(next);
   if (ok) window.api.closeWindow();

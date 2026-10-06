@@ -1,23 +1,182 @@
 'use strict';
 
-// Generates:
-//   build/icon.ico      -> installer + Windows exe icon
-//   build/icon.png      -> 256x256, general app icon
-//   src/tray.png        -> 32x32, loaded by main.js inside the asar
+// Generates app icons from the MAGNA brand asset:
 //
-// Pure Node — no image library required. PNG writer + CRC32 implemented inline.
+//   src/tray.png        -> 32×32, loaded by main.js at runtime for the tray
+//   build/icon.png      -> 256×256, used by electron-builder (Linux/Mac default)
+//   build/icon.ico      -> multi-size ICO (16/24/32/48/64/128/256) for Windows
+//                         exe + installer + uninstaller
+//
+// Source: `src/renderer/magna-logo.svg` (which is actually an SVG wrapper
+// around a base64-encoded PNG). We parse the PNG out, trim its transparent
+// margin, then resample with jimp to each icon size. ICO is a hand-rolled
+// PNG-in-ICO (works on Vista+).
 
-const { deflateSync } = require('node:zlib');
 const fs = require('node:fs');
 const path = require('node:path');
+const { deflateSync } = require('node:zlib');
+const { Jimp } = require('jimp');
 
-const ROOT  = path.join(__dirname, '..');
-const BUILD = path.join(ROOT, 'build');
-const SRC   = path.join(ROOT, 'src');
-fs.mkdirSync(BUILD, { recursive: true });
-fs.mkdirSync(SRC,   { recursive: true });
+const ROOT      = path.join(__dirname, '..');
+const BUILD_DIR = path.join(ROOT, 'build');
+const SRC_DIR   = path.join(ROOT, 'src');
+const RENDERER  = path.join(SRC_DIR, 'renderer');
+const SVG_PATH  = path.join(RENDERER, 'magna-logo.svg');
 
-// --- CRC32 (standard PNG polynomial) ---------------------------------------
+fs.mkdirSync(BUILD_DIR, { recursive: true });
+fs.mkdirSync(SRC_DIR,   { recursive: true });
+
+// ---------------------------------------------------------------------------
+// 1. Extract the embedded PNG from the SVG wrapper.
+// ---------------------------------------------------------------------------
+if (!fs.existsSync(SVG_PATH)) {
+  console.error(`[make-icons] missing ${SVG_PATH} — ship a MAGNA logo there first.`);
+  // Fall back to a solid-blue tiny PNG so builds still work.
+  const fallback = makeSolidPNG(32, [74, 142, 224]);
+  fs.writeFileSync(path.join(SRC_DIR, 'tray.png'), fallback);
+  fs.writeFileSync(path.join(BUILD_DIR, 'icon.png'), fallback);
+  fs.writeFileSync(path.join(BUILD_DIR, 'icon.ico'), fallbackICO(fallback));
+  process.exit(0);
+}
+
+const svgText = fs.readFileSync(SVG_PATH, 'utf8');
+const m = svgText.match(/data:image\/png;base64,([A-Za-z0-9+/=\s]+?)["']/);
+if (!m) {
+  console.error('[make-icons] could not locate base64 PNG inside SVG');
+  process.exit(1);
+}
+const sourcePNG = Buffer.from(m[1].replace(/\s+/g, ''), 'base64');
+console.log(`[make-icons] extracted PNG from SVG (${(sourcePNG.length / 1024).toFixed(1)} KB)`);
+
+(async () => {
+  const img = await Jimp.read(sourcePNG);
+  console.log(`[make-icons] source dimensions: ${img.bitmap.width}×${img.bitmap.height}`);
+
+  // Trim transparent margin so the icon fills its square.
+  const trimmed = await trimTransparent(img.clone());
+  console.log(`[make-icons] trimmed to: ${trimmed.bitmap.width}×${trimmed.bitmap.height}`);
+
+  // Produce PNG buffers at each icon size (square, centred on transparent bg).
+  const sizes = [16, 24, 32, 48, 64, 128, 256];
+  const pngBySize = {};
+  for (const s of sizes) {
+    const square = await squareFit(trimmed, s);
+    pngBySize[s] = await square.getBuffer('image/png');
+  }
+
+  // Emit outputs
+  fs.writeFileSync(path.join(SRC_DIR,   'tray.png'), pngBySize[32]);
+  fs.writeFileSync(path.join(BUILD_DIR, 'icon.png'), pngBySize[256]);
+  fs.writeFileSync(path.join(BUILD_DIR, 'icon.ico'), buildICO(sizes.map((s) => ({ size: s, png: pngBySize[s] }))));
+
+  console.log(`[make-icons] wrote src/tray.png (${pngBySize[32].length} B)`);
+  console.log(`[make-icons] wrote build/icon.png (${pngBySize[256].length} B)`);
+  console.log(`[make-icons] wrote build/icon.ico with ${sizes.length} sizes`);
+})().catch((e) => {
+  console.error('[make-icons] failed:', e);
+  process.exit(1);
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Trim fully-transparent rows/columns from the edges.
+async function trimTransparent(image) {
+  const { width, height, data } = image.bitmap;
+  const alpha = (x, y) => data[(y * width + x) * 4 + 3];
+
+  let top = 0, bottom = height - 1, left = 0, right = width - 1;
+  outerTop: for (; top < height; top++)
+    for (let x = 0; x < width; x++) if (alpha(x, top) > 8) break outerTop;
+  outerBot: for (; bottom >= 0; bottom--)
+    for (let x = 0; x < width; x++) if (alpha(x, bottom) > 8) break outerBot;
+  outerLeft: for (; left < width; left++)
+    for (let y = 0; y < height; y++) if (alpha(left, y) > 8) break outerLeft;
+  outerRight: for (; right >= 0; right--)
+    for (let y = 0; y < height; y++) if (alpha(right, y) > 8) break outerRight;
+
+  if (right <= left || bottom <= top) return image;
+
+  return image.crop({ x: left, y: top, w: right - left + 1, h: bottom - top + 1 });
+}
+
+// Fit the content inside a size×size square with transparent padding so it
+// doesn't touch the edges (nice for taskbar/tray rendering).
+async function squareFit(trimmed, size) {
+  const pad = Math.max(1, Math.floor(size * 0.06));
+  const inner = size - pad * 2;
+  const resized = trimmed.clone().contain({ w: inner, h: inner });
+  const canvas = new Jimp({ width: size, height: size, color: 0x00000000 });
+  canvas.composite(resized, pad, pad);
+  return canvas;
+}
+
+function buildICO(entries) {
+  // ICO header (6 bytes)
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);                // reserved
+  header.writeUInt16LE(1, 2);                // type = icon
+  header.writeUInt16LE(entries.length, 4);   // count
+
+  const dir = Buffer.alloc(16 * entries.length);
+  const images = [];
+  let offset = 6 + 16 * entries.length;
+
+  entries.forEach(({ size, png }, i) => {
+    const e = 16 * i;
+    dir[e]     = size === 256 ? 0 : size;    // width  (0 = 256)
+    dir[e + 1] = size === 256 ? 0 : size;    // height (0 = 256)
+    dir[e + 2] = 0;                           // palette
+    dir[e + 3] = 0;                           // reserved
+    dir.writeUInt16LE(1,  e + 4);            // planes
+    dir.writeUInt16LE(32, e + 6);            // bit count
+    dir.writeUInt32LE(png.length, e + 8);
+    dir.writeUInt32LE(offset,     e + 12);
+    offset += png.length;
+    images.push(png);
+  });
+
+  return Buffer.concat([header, dir, ...images]);
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: solid-color PNG, used only if the brand SVG is missing.
+// ---------------------------------------------------------------------------
+function makeSolidPNG(size, [r, g, b]) {
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const stride = 1 + size * 4;
+  const raw = Buffer.alloc(size * stride);
+  for (let y = 0; y < size; y++) {
+    raw[y * stride] = 0;
+    for (let x = 0; x < size; x++) {
+      const off = y * stride + 1 + x * 4;
+      raw[off] = r; raw[off+1] = g; raw[off+2] = b; raw[off+3] = 255;
+    }
+  }
+  const compressed = deflateSync(raw);
+  const chunk = (type, data) => {
+    const t = Buffer.from(type, 'ascii');
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([t, data])), 0);
+    return Buffer.concat([len, t, data, crc]);
+  };
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', compressed), chunk('IEND', Buffer.alloc(0))]);
+}
+
+function fallbackICO(png) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); header.writeUInt16LE(1, 2); header.writeUInt16LE(1, 4);
+  const dir = Buffer.alloc(16);
+  dir[0] = 32; dir[1] = 32; dir.writeUInt16LE(1, 4); dir.writeUInt16LE(32, 6);
+  dir.writeUInt32LE(png.length, 8); dir.writeUInt32LE(22, 12);
+  return Buffer.concat([header, dir, png]);
+}
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -27,182 +186,8 @@ const CRC_TABLE = (() => {
   }
   return t;
 })();
-
 function crc32(buf) {
   let crc = 0xFFFFFFFF >>> 0;
   for (let i = 0; i < buf.length; i++) crc = (CRC_TABLE[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8)) >>> 0;
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
-
-function chunk(type, data) {
-  const typeBuf = Buffer.from(type, 'ascii');
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
-  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
-  return Buffer.concat([len, typeBuf, data, crc]);
-}
-
-// --- PNG writer (RGBA 8-bit, no interlace) ---------------------------------
-function makePNG(w, h, pixelFn) {
-  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0);
-  ihdr.writeUInt32BE(h, 4);
-  ihdr[8]  = 8;   // bit depth
-  ihdr[9]  = 6;   // color type RGBA
-  ihdr[10] = 0;   // compression
-  ihdr[11] = 0;   // filter
-  ihdr[12] = 0;   // interlace
-
-  const stride = 1 + w * 4;
-  const raw = Buffer.alloc(h * stride);
-  for (let y = 0; y < h; y++) {
-    raw[y * stride] = 0;                    // filter: none
-    for (let x = 0; x < w; x++) {
-      const [r, g, b, a] = pixelFn(x, y);
-      const off = y * stride + 1 + x * 4;
-      raw[off]     = r & 0xFF;
-      raw[off + 1] = g & 0xFF;
-      raw[off + 2] = b & 0xFF;
-      raw[off + 3] = a & 0xFF;
-    }
-  }
-  const compressed = deflateSync(raw);
-
-  return Buffer.concat([
-    sig,
-    chunk('IHDR', ihdr),
-    chunk('IDAT', compressed),
-    chunk('IEND', Buffer.alloc(0))
-  ]);
-}
-
-// --- Magna "googly" character pixel renderer ------------------------------
-// Body: Magna red radial (#dc3232 → #4e0f0a). Eyes: white with black pupil.
-// Small white Magna "M" badge with a green #32b446 dot in the bottom-left.
-function googlyPixel(W, H) {
-  const cx = (W - 1) / 2;
-  const cy = (H - 1) / 2;
-  const bodyR = Math.min(W, H) / 2 - 1;
-
-  // Two googly eyes, both visible (top-left and top-right-ish).
-  const eyeLx = cx - W * 0.17;
-  const eyeRx = cx + W * 0.17;
-  const eyeY  = cy - H * 0.08;
-  const eyeR  = W * 0.18;
-  const pupOff = W * 0.04;
-  const pupR  = W * 0.075;
-
-  // Magna "M" badge bottom-left
-  const badgeCx = cx - W * 0.26;
-  const badgeCy = cy + H * 0.26;
-  const badgeR  = W * 0.18;
-  const dotCx   = badgeCx + W * 0.08;
-  const dotCy   = badgeCy + H * 0.08;
-  const dotR    = W * 0.055;
-
-  // Highlight on body (shine)
-  const shineCx = cx - W * 0.18;
-  const shineCy = cy - H * 0.22;
-  const shineR  = W * 0.1;
-
-  // Red radial: linear interpolation from inner to outer colour depending on
-  // distance from the gradient origin (approximates CSS radial-gradient).
-  const gcx = cx - W * 0.18;
-  const gcy = cy - H * 0.22;
-  const innerR  = [255, 122, 122];
-  const midR    = [220,  50,  50];
-  const outerR  = [ 78,  15,  10];
-
-  function bodyColour(px, py) {
-    const d = Math.hypot(px - gcx, py - gcy);
-    const t = Math.min(1, d / (bodyR * 0.9));
-    let c0, c1, u;
-    if (t < 0.5) { c0 = innerR; c1 = midR;   u = t * 2; }
-    else         { c0 = midR;   c1 = outerR; u = (t - 0.5) * 2; }
-    return [
-      Math.round(c0[0] + (c1[0] - c0[0]) * u),
-      Math.round(c0[1] + (c1[1] - c0[1]) * u),
-      Math.round(c0[2] + (c1[2] - c0[2]) * u)
-    ];
-  }
-
-  return (x, y) => {
-    // 2x2 supersample AA
-    let R = 0, G = 0, B = 0, A = 0;
-    const samples = [
-      [x + 0.25, y + 0.25], [x + 0.75, y + 0.25],
-      [x + 0.25, y + 0.75], [x + 0.75, y + 0.75]
-    ];
-    for (const [sx, sy] of samples) {
-      const bd = Math.hypot(sx - cx, sy - cy);
-      if (bd > bodyR + 0.5) continue;
-
-      // Badge dot (Magna green)
-      if (Math.hypot(sx - dotCx, sy - dotCy) <= dotR) {
-        R += 50; G += 180; B += 70; A += 255; continue;
-      }
-      // Badge (white circle)
-      if (Math.hypot(sx - badgeCx, sy - badgeCy) <= badgeR) {
-        R += 255; G += 255; B += 255; A += 255; continue;
-      }
-      // Pupils
-      if (Math.hypot(sx - (eyeLx + pupOff), sy - (eyeY + pupOff)) <= pupR
-       || Math.hypot(sx - (eyeRx + pupOff), sy - (eyeY + pupOff)) <= pupR) {
-        R += 25; G += 20; B += 25; A += 255; continue;
-      }
-      // Eye whites
-      if (Math.hypot(sx - eyeLx, sy - eyeY) <= eyeR
-       || Math.hypot(sx - eyeRx, sy - eyeY) <= eyeR) {
-        R += 255; G += 255; B += 255; A += 255; continue;
-      }
-      // Shine highlight
-      if (Math.hypot(sx - shineCx, sy - shineCy) <= shineR) {
-        R += 255; G += 190; B += 190; A += 255; continue;
-      }
-      // Body (red radial)
-      const bc = bodyColour(sx, sy);
-      R += bc[0]; G += bc[1]; B += bc[2]; A += 255;
-    }
-    return [Math.round(R / 4), Math.round(G / 4), Math.round(B / 4), Math.round(A / 4)];
-  };
-}
-
-// --- ICO writer (PNG-in-ICO, Vista+) ---------------------------------------
-function makeICO(sizes) {
-  const header = Buffer.alloc(6);
-  header.writeUInt16LE(0, 0);           // reserved
-  header.writeUInt16LE(1, 2);           // type = icon
-  header.writeUInt16LE(sizes.length, 4);
-
-  const entries = Buffer.alloc(16 * sizes.length);
-  const images = [];
-  let offset = 6 + 16 * sizes.length;
-
-  sizes.forEach((s, i) => {
-    const png = makePNG(s, s, googlyPixel(s, s));
-    const e = 16 * i;
-    entries[e]     = s === 256 ? 0 : s;         // width  (0 = 256)
-    entries[e + 1] = s === 256 ? 0 : s;         // height (0 = 256)
-    entries[e + 2] = 0;                          // color palette
-    entries[e + 3] = 0;                          // reserved
-    entries.writeUInt16LE(1,  e + 4);           // planes
-    entries.writeUInt16LE(32, e + 6);           // bit count
-    entries.writeUInt32LE(png.length, e + 8);   // image size
-    entries.writeUInt32LE(offset,     e + 12);  // offset in file
-    offset += png.length;
-    images.push(png);
-  });
-
-  return Buffer.concat([header, entries, ...images]);
-}
-
-// --- Emit files ------------------------------------------------------------
-function writeFile(p, buf) {
-  fs.writeFileSync(p, buf);
-  console.log(`wrote ${path.relative(ROOT, p)} (${buf.length} bytes)`);
-}
-
-writeFile(path.join(SRC,   'tray.png'), makePNG(32, 32, googlyPixel(32, 32)));
-writeFile(path.join(BUILD, 'icon.png'), makePNG(256, 256, googlyPixel(256, 256)));
-writeFile(path.join(BUILD, 'icon.ico'), makeICO([16, 24, 32, 48, 64, 128, 256]));
-console.log('done.');
