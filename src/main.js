@@ -449,7 +449,9 @@ function startApp() {
       });
       bubbleWin.setAlwaysOnTop(true, 'screen-saver');
       bubbleWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
-      bubbleWin.setIgnoreMouseEvents(true, { forward: true });
+      // Always clickable — the bubble is small and sticky, so the user
+      // interacts with it (close ✕, nav arrows, copy, clicking a link in a
+      // reply). No more click-through, no more lost-first-click race.
       try { bubbleWin.setContentProtection(true); } catch {}
       bubbleWin.setMenuBarVisibility(false);
       bubbleWin.loadFile(path.join(__dirname, 'renderer', 'bubble.html'));

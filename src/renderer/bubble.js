@@ -12,6 +12,22 @@ const counter  = document.getElementById('counter');
 let currentReply = '';
 let lastSoundAt = 0;
 
+// --- Escape HTML + linkify URLs so http(s) links in the reply are
+// clickable. The actual opening is routed through shell.openExternal
+// via preload (window.api.openExternal).
+const HTML_ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => HTML_ENTITIES[c]);
+}
+function linkify(text) {
+  // Escape first, then convert URL substrings to <a> tags. Trailing
+  // punctuation (.,!?;:) is kept outside the link so it reads naturally.
+  const escaped = escapeHtml(text);
+  return escaped.replace(/(https?:\/\/[^\s<]+?)([.,!?;:]*)(?=\s|$)/g, (_, url, trail) => {
+    return `<a href="${url}" class="link" rel="noopener">${url}</a>${trail}`;
+  });
+}
+
 // --- Procedural "done" chirp when a new reply arrives ---------------------
 let outCtx = null;
 function playDoneChirp() {
@@ -48,7 +64,7 @@ if (window.api?.onBubble) {
     currentReply = reply;
 
     userEl.textContent  = user;
-    replyEl.textContent = reply;
+    replyEl.innerHTML   = linkify(reply);
 
     // Nav state
     if (count > 0 && idx >= 0) {
@@ -78,9 +94,17 @@ if (window.api?.onBubbleHide) {
   });
 }
 
-// Interactive on hover (window is otherwise click-through).
-bubble.addEventListener('mouseenter', () => { try { window.api.bubbleSetIgnore(false); } catch {} });
-bubble.addEventListener('mouseleave', () => { try { window.api.bubbleSetIgnore(true);  } catch {} });
+// Open any linkified <a> through the OS default browser instead of
+// trying to navigate the bubble window itself.
+replyEl.addEventListener('click', (e) => {
+  const a = e.target.closest('a.link');
+  if (!a) return;
+  e.preventDefault();
+  const href = a.getAttribute('href');
+  if (href && /^https?:\/\//i.test(href)) {
+    try { window.api.openExternal(href); } catch {}
+  }
+});
 
 prevBtn.addEventListener('click', (e) => {
   e.stopPropagation();

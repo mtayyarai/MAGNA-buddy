@@ -98,6 +98,17 @@
       font-weight: 500;
       flex: 1;
     }
+    .reply a.link {
+      color: #4a8ee0;
+      text-decoration: underline;
+      cursor: pointer;
+      word-break: break-all;
+    }
+    .reply a.link:hover { color: #2b6ad9; }
+    @media (prefers-color-scheme: dark) {
+      .reply a.link { color: #7fb0f0; }
+      .reply a.link:hover { color: #a7cafd; }
+    }
 
     /* Tail pointing down toward the widget */
     .tail {
