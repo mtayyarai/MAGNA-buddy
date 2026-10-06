@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Settings — MAGNA Buddy</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Settings</h1>
+
+    <section>
+      <h2>Models</h2>
+      <p class="muted small">
+        Realtime model = the voice brain. Pick the cheapest that handles what you want.
+      </p>
+
+      <label>Realtime model
+        <select id="realtimeModel">
+          <option value="gpt-realtime-2.1-mini">gpt-realtime-2.1-mini &mdash; cheaper, faster variant of 2.1 (recommended)</option>
+          <option value="gpt-live-1">gpt-live-1 &mdash; full-duplex (listens + talks), ~$0.05/min</option>
+          <option value="gpt-realtime-2.1">gpt-realtime-2.1 &mdash; audio $32/$64 per 1M, text $4/$24 per 1M</option>
+          <option value="gpt-realtime-2">gpt-realtime-2 &mdash; previous gen (May 2026)</option>
+          <option value="gpt-realtime-1.5">gpt-realtime-1.5 &mdash; older audio-in/audio-out</option>
+          <option value="gpt-realtime-translate">gpt-realtime-translate &mdash; live speech translation, ~$0.034/min</option>
+        </select>
+      </label>
+      <p class="muted small" id="modelPricing" style="margin-top:4px"></p>
+
+      <label>Transcription model (used inside realtime session for user transcript)
+        <input id="transcribeModel" type="text" placeholder="whisper-1">
+      </label>
+      <label>Research model (future web_research tool)
+        <input id="researchModel" type="text">
+      </label>
+    </section>
+
+    <section>
+      <h2>Character</h2>
+      <div class="grid-2">
+        <label>Home position
+          <select id="homePosition">
+            <option value="left">left</option>
+            <option value="center">center</option>
+            <option value="right">right</option>
+          </select>
+        </label>
+        <label>Cursor size (48–120)
+          <input id="cursorSize" type="number" min="48" max="120">
+        </label>
+      </div>
+      <label class="check"><input id="captions"         type="checkbox"> Show captions</label>
+      <label class="check"><input id="followMouse"      type="checkbox"> Follow mouse</label>
+      <label class="check"><input id="allowComputerUse" type="checkbox"> Let him use the computer</label>
+      <label class="check"><input id="startWithWindows" type="checkbox"> Start with Windows</label>
+    </section>
+
+    <section>
+      <h2>Personality</h2>
+      <textarea id="personality" rows="6"></textarea>
+    </section>
+
+    <section>
+      <h2>Hotkeys</h2>
+      <p class="muted small">Rebindable UI arrives in Phase 1. Current slots:</p>
+      <pre id="hotkeys" class="code"></pre>
+    </section>
+
+    <p class="muted italic small">
+      Phase 0 scaffold — overlay character, voice, screen reading and computer-use tools are not implemented yet.
+    </p>
+
+    <div class="footer">
+      <button id="cancelBtn" class="btn-ghost"   type="button">Cancel</button>
+      <button id="saveBtn"   class="btn-primary" type="button">Save</button>
+    </div>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>

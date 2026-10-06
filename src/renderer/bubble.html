@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>MAGNA Buddy bubble</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+      color: #222;
+    }
+
+    .bubble {
+      position: absolute;
+      inset: 8px 8px 20px 8px;
+      background: rgba(255, 255, 255, 0.97);
+      border: 1.5px solid rgba(0, 0, 0, 0.08);
+      border-radius: 16px;
+      padding: 10px 12px 12px;
+      box-shadow: 0 10px 28px rgba(30, 40, 90, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+      transition: opacity 180ms ease, transform 180ms ease;
+      overflow: hidden;
+      backdrop-filter: blur(8px);
+      -webkit-user-select: text;
+      user-select: text;
+      cursor: text;
+    }
+    .bubble.visible {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Header controls — history nav + copy + close */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      font-size: 11.5px;
+      color: #666;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .ctrl-btn {
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      color: #666;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1;
+      padding: 3px 7px;
+      border-radius: 4px;
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .ctrl-btn:hover:not(:disabled) { background: rgba(0, 0, 0, 0.06); color: #222; }
+    .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
+    .counter {
+      font-variant-numeric: tabular-nums;
+      min-width: 44px;
+      text-align: center;
+      font-size: 11.5px;
+    }
+    .spacer { flex: 1; }
+    .copy-btn { font-size: 11.5px; padding: 3px 10px; }
+    .copy-btn.copied { color: #2a7a3e; }
+    .close-btn { font-size: 15px; padding: 2px 8px; }
+
+    .user {
+      font-size: 11.5px;
+      line-height: 1.3;
+      color: #7a7a85;
+      font-style: italic;
+      max-height: 42px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      border-left: 2px solid rgba(0, 0, 0, 0.08);
+      padding-left: 8px;
+    }
+    .user:empty { display: none; }
+
+    .reply {
+      font-size: 13.5px;
+      line-height: 1.45;
+      color: #1b1b26;
+      overflow-y: auto;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    /* Tail pointing down toward the widget */
+    .tail {
+      position: absolute;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+      width: 20px; height: 20px;
+      background: rgba(255, 255, 255, 0.97);
+      border-right: 1.5px solid rgba(0, 0, 0, 0.08);
+      border-bottom: 1.5px solid rgba(0, 0, 0, 0.08);
+      border-radius: 0 0 5px 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .bubble { background: rgba(32, 32, 38, 0.97); border-color: rgba(255,255,255,0.08); color: #eaeaea; }
+      .controls { border-color: rgba(255,255,255,0.08); color: #a0a0a0; }
+      .ctrl-btn { color: #a0a0a0; }
+      .ctrl-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #eaeaea; }
+      .user  { color: #a7a7b2; border-left-color: rgba(255,255,255,0.12); }
+      .reply { color: #eaeaea; }
+      .tail  { background: rgba(32, 32, 38, 0.97); border-color: rgba(255,255,255,0.08); }
+      .copy-btn.copied { color: #7ad693; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bubble" id="bubble">
+    <div class="controls">
+      <button class="ctrl-btn" id="prevBtn" title="Previous reply">◀</button>
+      <div class="counter" id="counter">—</div>
+      <button class="ctrl-btn" id="nextBtn" title="Next reply">▶</button>
+      <div class="spacer"></div>
+      <button class="ctrl-btn copy-btn" id="copyBtn" title="Copy reply">copy</button>
+      <button class="ctrl-btn close-btn" id="closeBtn" title="Close">✕</button>
+    </div>
+    <div class="user"  id="userText"></div>
+    <div class="reply" id="replyText"></div>
+    <div class="tail"></div>
+  </div>
+  <script src="bubble.js"></script>
+</body>
+</html>

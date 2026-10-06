@@ -1,0 +1,92 @@
+{
+  "name": "magna-buddy",
+  "version": "0.5.0",
+  "description": "MAGNA Buddy — on-screen voice assistant with push-to-talk, OpenAI Realtime API, computer-use tools, and the Magna brand character.",
+  "main": "src/main.js",
+  "private": true,
+  "author": "MAGNA",
+  "license": "UNLICENSED",
+  "scripts": {
+    "icons": "node scripts/make-icons.js",
+    "start": "npm run icons && electron .",
+    "dist": "npm run icons && electron-builder --win",
+    "dist:mac": "npm run icons && electron-builder --mac",
+    "dist:all": "npm run icons && electron-builder --win --mac"
+  },
+  "devDependencies": {
+    "electron": "32.3.3",
+    "electron-builder": "25.1.8"
+  },
+  "build": {
+    "appId": "com.magna.buddy",
+    "productName": "MAGNA Buddy",
+    "copyright": "© 2026 MAGNA",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/node_modules/*/{test,__tests__,tests,example,examples,doc,docs}",
+      "!**/node_modules/*/*.{md,markdown,ts,map,log}",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp}",
+      "!.editorconfig",
+      "!**/._*",
+      "!dist",
+      "!build/node_modules"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "MAGNA-Buddy-Setup-${version}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MAGNA Buddy",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["universal"] },
+        { "target": "zip", "arch": ["universal"] }
+      ],
+      "category": "public.app-category.productivity",
+      "artifactName": "MAGNA-Buddy-${version}-${arch}.${ext}",
+      "icon": "build/icon.png",
+      "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "MAGNA Buddy needs your microphone for push-to-talk voice input.",
+        "NSAppleEventsUsageDescription": "MAGNA Buddy uses AppleScript to launch apps and press keys when you ask it to.",
+        "LSUIElement": true
+      }
+    },
+    "dmg": {
+      "title": "MAGNA Buddy ${version}",
+      "icon": "build/icon.png",
+      "contents": [
+        { "x": 130, "y": 220, "type": "file" },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 380 }
+    }
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}

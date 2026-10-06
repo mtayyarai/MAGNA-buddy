@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' blob:; worker-src 'self' blob:; media-src 'self' blob:">
+  <title>MAGNA Buddy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      -webkit-user-select: none;
+      cursor: grab;
+    }
+    body.dragging { cursor: grabbing; }
+    body.listening, body.thinking { cursor: pointer; }
+
+    .stage {
+      position: absolute; inset: 8%;
+      animation: breathe 3.4s ease-in-out infinite;
+    }
+    @keyframes breathe {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50%      { transform: translateY(-1%) scale(1.02); }
+    }
+
+    /* Ring behind the body — used for listening pulse / thinking spinner */
+    .ring {
+      position: absolute; inset: -8%;
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+      border: 3px solid transparent;
+    }
+    body.listening .ring {
+      opacity: 1;
+      /* Magna green — #32b446 */
+      border-color: rgba(50, 180, 70, 0.9);
+      animation: pulse 1.3s ease-in-out infinite;
+      box-shadow: 0 0 18px 2px rgba(50, 180, 70, 0.6);
+    }
+    body.thinking .ring {
+      opacity: 1;
+      border-top-color: rgba(255, 170, 70, 0.95);
+      border-right-color: rgba(255, 170, 70, 0.35);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1);    opacity: 0.4; }
+      50%      { transform: scale(1.09); opacity: 0.9; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .body {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      /* 3-stop Magna gradient — red (#dc3232) → dark red (#821e14) → green (#32b446) */
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255,210,210,0.75) 0%, rgba(255,210,210,0) 32%),
+        linear-gradient(155deg, #ff6a6a 0%, #dc3232 28%, #821e14 65%, #2a8a3a 92%, #32b446 100%);
+      /* No outer drop shadow — just internal shaping so the ball looks round. */
+      box-shadow:
+        inset -8px -10px 18px rgba(0, 0, 0, 0.3),
+        inset 6px 8px 16px rgba(255, 255, 255, 0.18);
+      transition: background 220ms ease, transform 160ms ease;
+    }
+    body.listening .body {
+      /* Magna green — #32b446 */
+      background:
+        radial-gradient(circle at 32% 28%, #c3f5c7 0%, #7fe59f 30%, #32b446 70%, #19873a 100%);
+      box-shadow:
+        inset -8px -10px 18px rgba(0, 0, 0, 0.22),
+        inset 6px 8px 16px rgba(255, 255, 255, 0.3);
+      transform: scale(1.06);
+    }
+    body.thinking .body {
+      background:
+        radial-gradient(circle at 32% 28%, #f7d7a0 0%, #e8a855 30%, #cc7a26 70%, #984f14 100%);
+    }
+    body.speaking .body {
+      animation: talkBounce 220ms ease-in-out infinite alternate;
+    }
+    @keyframes talkBounce {
+      from { transform: translateY(0)   scale(1);    }
+      to   { transform: translateY(-2%) scale(1.02); }
+    }
+
+    .shine {
+      position: absolute;
+      width: 28%; height: 20%;
+      top: 10%; left: 14%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.6), rgba(255,255,255,0));
+      border-radius: 50%;
+      filter: blur(0.5px);
+      pointer-events: none;
+    }
+
+    .eye {
+      position: absolute;
+      width: 32%; height: 32%;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow:
+        inset 0 3px 5px rgba(0, 0, 0, 0.25),
+        0 1px 2px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+    }
+    .eye.left  { top: 24%; left: 18%; }
+    .eye.right { top: 20%; left: 50%; }
+
+    .pupil {
+      position: absolute;
+      width: 42%; height: 42%;
+      background: radial-gradient(circle at 35% 30%, #333 0%, #000 70%);
+      border-radius: 50%;
+      top: 29%; left: 29%;
+      transition: top 120ms ease-out, left 120ms ease-out;
+    }
+    .pupil::after {
+      content: "";
+      position: absolute;
+      width: 32%; height: 32%;
+      top: 10%; left: 15%;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+    }
+
+    .eye.blinking { animation: blink 180ms linear; }
+    @keyframes blink {
+      0%, 100% { transform: scaleY(1); }
+      50%      { transform: scaleY(0.08); }
+    }
+
+    /* Mic icon shown while listening */
+    .mic {
+      position: absolute;
+      bottom: -2%;
+      right: -2%;
+      width: 32%;
+      height: 32%;
+      background: #fff;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      color: #32b446;
+      font-size: 70%;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      opacity: 0;
+      transform: scale(0.6);
+      transition: opacity 180ms ease, transform 180ms ease;
+      pointer-events: none;
+    }
+    body.listening .mic {
+      opacity: 1;
+      transform: scale(1);
+      animation: micPulse 0.8s ease-in-out infinite;
+    }
+    @keyframes micPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(50,180,70,0.65); }
+      50%      { box-shadow: 0 0 0 6px rgba(50,180,70,0); }
+    }
+
+    /* Magna wordmark on the character's belly */
+    .brand {
+      position: absolute;
+      left: 10%;
+      bottom: 18%;
+      width: 80%;
+      height: auto;
+      pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="ring"></div>
+    <div class="body" id="hitbox">
+      <div class="shine"></div>
+      <div class="eye left"><div class="pupil"></div></div>
+      <div class="eye right"><div class="pupil"></div></div>
+      <div class="mic">●</div>
+      <img class="brand" src="magna-logo.svg" alt="MAGNA AI" />
+    </div>
+  </div>
+  <script src="widget.js"></script>
+</body>
+</html>

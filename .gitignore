@@ -1,0 +1,39 @@
+# Node
+node_modules/
+
+# Build output / installers (too large for git — use GitHub Releases)
+dist/
+builds/
+
+# Generated icons (make-icons.js writes these)
+src/tray.png
+build/icon.png
+build/icon.ico
+
+# Logs + runtime
+*.log
+
+# Local-only test / debug artifacts
+_test-*
+_corner-*
+_chatbody.json
+_k.txt
+_RealtimeHost.swift
+api.txt
+desktop.ini
+
+# Brand assets — kept locally so the exe can bundle them,
+# never pushed to the public repo
+Magna AI_RGB_Logo*.svg
+ONLYMagna AI_RGB_Logo*.svg
+src/renderer/magna-logo.svg
+
+# User settings / secrets
+settings.json
+keys.bin
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

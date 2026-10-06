@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>OpenAI API Key</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container narrow">
+    <h1>OpenAI API key</h1>
+    <p class="muted small">
+      Paste a key (usually starts with <code>sk-</code>). It is stored encrypted on this machine
+      using the OS keystore (DPAPI on Windows). It is only sent to <code>api.openai.com</code>.
+    </p>
+
+    <div class="row">
+      <input type="password" id="keyInput" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+      <button id="toggleShow" class="btn-ghost" type="button">Show</button>
+    </div>
+
+    <div class="row row-left">
+      <button id="testBtn" class="btn" type="button">Test connection</button>
+      <span id="status" class="muted small"></span>
+    </div>
+
+    <p class="muted small">
+      Get a key at <a href="#" id="openSite">platform.openai.com/api-keys</a>. The key must have access
+      to the Realtime, Transcription and Responses APIs — see <em>Settings</em> for the exact model names.
+    </p>
+
+    <div class="footer">
+      <button id="clearBtn"  class="btn-ghost"   type="button">Clear</button>
+      <button id="cancelBtn" class="btn-ghost"   type="button">Cancel</button>
+      <button id="saveBtn"   class="btn-primary" type="button">Save</button>
+    </div>
+  </div>
+  <script src="apiKey.js"></script>
+</body>
+</html>

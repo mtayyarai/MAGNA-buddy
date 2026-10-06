@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>AI character cursor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      pointer-events: none;
+      -webkit-user-select: none;
+      font-family: 'Segoe UI', system-ui, Arial, sans-serif;
+    }
+
+    /* The character cursor is a mini twin of the home-widget blueberry. */
+    .ai-char {
+      position: absolute;
+      left: -200px; top: -200px;
+      width: 64px; height: 64px;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      pointer-events: none;
+      transition:
+        left 820ms cubic-bezier(0.22, 1, 0.36, 1),
+        top  820ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 220ms ease;
+      /* No drop shadow behind the character */
+    }
+    /* no-anim is applied for a single frame while we teleport to the start
+       position; CSS transition is suppressed so the user doesn't see it. */
+    .ai-char.no-anim {
+      transition: none !important;
+    }
+    .ai-char.visible { opacity: 1; }
+    .ai-char.landing .ai-body {
+      animation: landBounce 420ms ease-out 1;
+    }
+    @keyframes landBounce {
+      0%   { transform: scale(1); }
+      35%  { transform: scale(1.18, 0.86); }
+      70%  { transform: scale(0.94, 1.08); }
+      100% { transform: scale(1); }
+    }
+
+    .ai-body {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      /* 3-stop Magna gradient to match the home-widget character */
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255,210,210,0.75) 0%, rgba(255,210,210,0) 32%),
+        linear-gradient(155deg, #ff6a6a 0%, #dc3232 28%, #821e14 65%, #2a8a3a 92%, #32b446 100%);
+      box-shadow:
+        inset -6px -8px 14px rgba(0, 0, 0, 0.3),
+        inset 5px 6px 12px rgba(255, 255, 255, 0.18);
+    }
+
+    .ai-shine {
+      position: absolute;
+      width: 26%; height: 18%;
+      top: 10%; left: 14%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.65), rgba(255,255,255,0));
+      border-radius: 50%;
+      filter: blur(0.5px);
+    }
+
+    .ai-eye {
+      position: absolute;
+      width: 30%; height: 30%;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
+      overflow: hidden;
+    }
+    .ai-eye.left  { top: 24%; left: 18%; }
+    .ai-eye.right { top: 20%; left: 50%; }
+
+    .ai-pupil {
+      position: absolute;
+      width: 42%; height: 42%;
+      background: radial-gradient(circle at 35% 30%, #333 0%, #000 70%);
+      border-radius: 50%;
+      top: 32%; left: 30%;
+      transition: top 120ms ease-out, left 120ms ease-out;
+    }
+    .ai-pupil::after {
+      content: "";
+      position: absolute;
+      width: 32%; height: 32%;
+      top: 10%; left: 15%;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 50%;
+    }
+
+    /* Magna wordmark on the AI character cursor */
+    .ai-brand {
+      position: absolute;
+      left: 10%;
+      bottom: 18%;
+      width: 80%;
+      height: auto;
+      pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    }
+
+    /* Click ripple when cursor arrives */
+    .ring {
+      position: absolute;
+      left: -8px; top: -8px;
+      width: 80px; height: 80px;
+      /* Magna red */
+      border: 4px solid rgba(220, 50, 50, 0.95);
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .ai-char.visible .ring {
+      animation: ripple 1s ease-out infinite;
+    }
+    @keyframes ripple {
+      0%   { transform: scale(0.55); opacity: 0.9; }
+      100% { transform: scale(1.6);  opacity: 0; }
+    }
+
+    .ping {
+      position: absolute;
+      left: -4px; top: -4px;
+      width: 72px; height: 72px;
+      border: 4px solid #dc3232;
+      border-radius: 50%;
+      opacity: 0;
+      transform: scale(0.5);
+      pointer-events: none;
+    }
+    .ai-char.pinging .ping {
+      animation: pingAnim 520ms ease-out 1;
+    }
+    @keyframes pingAnim {
+      0%   { opacity: 1; transform: scale(0.5); border-width: 4px; }
+      100% { opacity: 0; transform: scale(2.2); border-width: 1px; }
+    }
+
+    /* Action label (e.g. "typing hello" or "⌨ ctrl+t") */
+    .label {
+      position: absolute;
+      left: 100%; top: 50%;
+      margin-left: 14px;
+      transform: translateY(-50%);
+      padding: 6px 12px;
+      background: rgba(220, 50, 50, 0.95);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      max-width: 420px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 4px 12px rgba(220, 50, 50, 0.45);
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
+    }
+    .ai-char.labelled .label { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="ai-char" id="c">
+    <div class="ai-body">
+      <div class="ai-shine"></div>
+      <div class="ai-eye left"><div class="ai-pupil"></div></div>
+      <div class="ai-eye right"><div class="ai-pupil"></div></div>
+      <img class="ai-brand" src="magna-logo.svg" alt="MAGNA AI" />
+    </div>
+    <div class="ring"></div>
+    <div class="ping"></div>
+    <div class="label" id="label"></div>
+  </div>
+  <script src="cursor.js"></script>
+</body>
+</html>
