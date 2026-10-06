@@ -1,6 +1,6 @@
 {
   "name": "magna-buddy",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "MAGNA Buddy — on-screen voice assistant with push-to-talk, OpenAI Realtime API, computer-use tools, and the Magna brand character.",
   "main": "src/main.js",
   "private": true,

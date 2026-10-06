@@ -104,7 +104,9 @@ async function trimTransparent(image) {
 // Fit the content inside a size×size square with transparent padding so it
 // doesn't touch the edges (nice for taskbar/tray rendering).
 async function squareFit(trimmed, size) {
-  const pad = Math.max(1, Math.floor(size * 0.06));
+  // Tight padding so the Magna M fills the icon canvas — important for
+  // small (16/24/32 px) tray + taskbar renderings where every pixel counts.
+  const pad = Math.max(1, Math.floor(size * 0.02));
   const inner = size - pad * 2;
   const resized = trimmed.clone().contain({ w: inner, h: inner });
   const canvas = new Jimp({ width: size, height: size, color: 0x00000000 });
