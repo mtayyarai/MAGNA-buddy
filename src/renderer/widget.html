@@ -163,27 +163,29 @@
       50%      { box-shadow: 0 0 0 6px rgba(50,180,70,0); }
     }
 
-    /* Magna wordmark lives inside a small white rounded-square badge
-       pinned just above the bottom edge of the character. */
+    /* Magna wordmark — small white rounded-square badge that hugs the logo,
+       pinned low on the character's belly. */
     .brand-plate {
       position: absolute;
       left: 50%;
-      bottom: 3%;
-      width: 46%;
+      bottom: -1%;
+      width: 32%;
       transform: translateX(-50%);
       background: #fff;
-      border-radius: 24%;
-      padding: 7% 9%;
+      border-radius: 22%;
+      padding: 2.5%;
       box-sizing: border-box;
       box-shadow:
-        0 2px 5px rgba(0, 0, 0, 0.35),
-        inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+        0 2px 4px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px rgba(0, 0, 0, 0.06);
       pointer-events: none;
       display: flex;
       align-items: center;
       justify-content: center;
     }
     .brand {
+      /* The logo image keeps roughly the same on-screen size as before —
+         plate shrinks around it, not the icon. */
       width: 100%;
       height: auto;
       display: block;
